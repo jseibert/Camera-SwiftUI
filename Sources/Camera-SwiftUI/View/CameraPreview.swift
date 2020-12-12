@@ -61,17 +61,27 @@ public struct CameraPreview: UIViewRepresentable {
     }
     
     public let session: AVCaptureSession
+    public let orientation: AVCaptureVideoOrientation
+    public let gravity: AVLayerVideoGravity
+    public let backgroundColor: UIColor
     
-    public init(session: AVCaptureSession) {
+    public init(session: AVCaptureSession,
+                orientation: AVCaptureVideoOrientation = .portrait,
+                gravity: AVLayerVideoGravity = .resizeAspect,
+                backgroundColor: UIColor = .black) {
         self.session = session
+        self.orientation = orientation
+        self.gravity = gravity
+        self.backgroundColor = backgroundColor
     }
     
     public func makeUIView(context: Context) -> VideoPreviewView {
         let viewFinder = VideoPreviewView()
-        viewFinder.backgroundColor = .black
+        viewFinder.backgroundColor = backgroundColor
         viewFinder.videoPreviewLayer.cornerRadius = 0
         viewFinder.videoPreviewLayer.session = session
-        viewFinder.videoPreviewLayer.connection?.videoOrientation = .portrait
+        viewFinder.videoPreviewLayer.connection?.videoOrientation = orientation
+        viewFinder.videoPreviewLayer.videoGravity = gravity
         return viewFinder
     }
     
