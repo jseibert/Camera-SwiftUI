@@ -408,8 +408,7 @@ public class CameraService: NSObject, Identifiable {
             if self.isSessionRunning {
                 if self.setupResult == .success {
                     self.session.stopRunning()
-                    self.isSessionRunning = self.session.isRunning
-                    print("CAMERA STOPPED")
+                    self.isSessionRunning = false
                     self.removeObservers()
                     
                     if !self.session.isRunning {
@@ -432,7 +431,6 @@ public class CameraService: NSObject, Identifiable {
                     // Only setup observers and start the session if setup succeeded.
                     self.addObservers()
                     self.session.startRunning()
-                    print("CAMERA RUNNING")
                     self.isSessionRunning = self.session.isRunning
                     
                     if self.session.isRunning {
