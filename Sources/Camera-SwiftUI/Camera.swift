@@ -13,6 +13,7 @@ public final class Camera: ObservableObject, CameraServiceDelegate {
     private let service = CameraService()
 
     @Published public var photo: Photo?
+    @Published public var qrCode: String?
     @Published public var showAlertError = false
     @Published public var isFlashOn = false
     @Published public var isCapturing = false
@@ -90,5 +91,9 @@ public final class Camera: ObservableObject, CameraServiceDelegate {
 
     func photoCaptureIsPending(_ pending: Bool) {
         // TODO: Not implemented
+    }
+
+    func didDetectQRCode(code: String) {
+        self.qrCode = code
     }
 }

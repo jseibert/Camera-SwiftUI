@@ -35,9 +35,11 @@ protocol CameraServiceDelegate {
 
     func didFailToCapturePhoto()
     func photoCaptureIsPending(_ pending: Bool)
+
+    func didDetectQRCode(code: String)
 }
 
-class CameraService: NSObject, Identifiable {
+class CameraService: NSObject, Identifiable, AVCaptureMetadataOutputObjectsDelegate {
     typealias PhotoCaptureSessionID = String
     
     @Published public var flashMode: AVCaptureDevice.FlashMode = .off
@@ -213,6 +215,14 @@ class CameraService: NSObject, Identifiable {
             setupResult = .configurationFailed
             session.commitConfiguration()
             return
+        }
+
+        // QR Code output
+        let qrOutput = AVCaptureMetadataOutput()
+        if session.canAddOutput(qrOutput) {
+            session.addOutput(qrOutput)
+
+            qrOutput.setMetadataObjectsDelegate(self, queue: DispatchQueue.main)
         }
         
         session.commitConfiguration()
@@ -652,6 +662,22 @@ class CameraService: NSObject, Identifiable {
         print("Capture session interruption ended")
         DispatchQueue.main.async {
             self.isCameraUnavailable = false
+        }
+    }
+
+    // MARK: - AVCaptureMetadataOutputObjectsDelegate
+
+    func metadataOutput(_ output: AVCaptureMetadataOutput, didOutput metadataObjects: [AVMetadataObject], from connection: AVCaptureConnection) {
+        for metadata in metadataObjects {
+            guard
+                let readableCodeObject = metadata as? AVMetadataMachineReadableCodeObject,
+                let code = readableCodeObject.stringValue
+            else {
+                return
+            }
+
+            AudioServicesPlaySystemSound(SystemSoundID(kSystemSoundID_Vibrate))
+            self.delegate?.didDetectQRCode(code: code)
         }
     }
 }
