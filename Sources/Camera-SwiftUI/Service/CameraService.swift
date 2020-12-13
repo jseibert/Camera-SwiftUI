@@ -223,6 +223,12 @@ class CameraService: NSObject, Identifiable, AVCaptureMetadataOutputObjectsDeleg
             session.addOutput(qrOutput)
 
             qrOutput.setMetadataObjectsDelegate(self, queue: DispatchQueue.main)
+            qrOutput.metadataObjectTypes = [.qr]
+        } else {
+            print("Could not add metadata output to the session")
+            setupResult = .configurationFailed
+            session.commitConfiguration()
+            return
         }
         
         session.commitConfiguration()
