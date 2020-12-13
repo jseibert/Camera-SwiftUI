@@ -682,7 +682,6 @@ class CameraService: NSObject, Identifiable, AVCaptureMetadataOutputObjectsDeleg
                 return
             }
 
-            AudioServicesPlaySystemSound(SystemSoundID(kSystemSoundID_Vibrate))
             self.delegate?.didDetectQRCode(code: code)
         }
     }

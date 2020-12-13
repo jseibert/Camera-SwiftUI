@@ -93,7 +93,19 @@ public final class Camera: ObservableObject, CameraServiceDelegate {
         // TODO: Not implemented
     }
 
+    private var qrResetWorkItem: DispatchWorkItem?
     func didDetectQRCode(code: String) {
+        guard self.qrCode != code else {
+            return
+        }
+
+        qrResetWorkItem?.cancel()
         self.qrCode = code
+
+        qrResetWorkItem = DispatchWorkItem { [weak self] in
+            self?.qrCode = nil
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: qrResetWorkItem!)
     }
 }
