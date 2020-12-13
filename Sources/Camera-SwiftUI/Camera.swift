@@ -9,28 +9,24 @@ import Foundation
 import Combine
 import AVFoundation
 
-public final class Camera: ObservableObject {
+public final class Camera: ObservableObject, CameraServiceDelegate {
     private let service = CameraService()
 
-    @Published public var photo: Photo!
+    @Published public var photo: Photo?
     @Published public var showAlertError = false
     @Published public var isFlashOn = false
-    @Published public var willCapturePhoto = false
+    @Published public var isCapturing = false
 
     public var alertError: AlertError!
-    public var session: AVCaptureSession
+    public var session: AVCaptureSession {
+        return service.session
+    }
 
     private var subscriptions = Set<AnyCancellable>()
     private var isConfigured = false
 
     public init() {
-        self.session = service.session
-
-        service.$photo.sink { [weak self] (photo) in
-            guard let pic = photo else { return }
-            self?.photo = pic
-        }
-        .store(in: &self.subscriptions)
+        service.delegate = self
 
         service.$shouldShowAlertView.sink { [weak self] (val) in
             self?.alertError = self?.service.alertError
@@ -40,11 +36,6 @@ public final class Camera: ObservableObject {
 
         service.$flashMode.sink { [weak self] (mode) in
             self?.isFlashOn = mode == .on
-        }
-        .store(in: &self.subscriptions)
-
-        service.$willCapturePhoto.sink { [weak self] (val) in
-            self?.willCapturePhoto = val
         }
         .store(in: &self.subscriptions)
     }
@@ -80,5 +71,24 @@ public final class Camera: ObservableObject {
 
     public func switchFlash() {
         service.flashMode = service.flashMode == .on ? .off : .on
+    }
+
+    // MARK: - CameraServiceDelegate
+
+    func willCapturePhoto() {
+        self.isCapturing = true
+    }
+
+    func didCapturePhoto(_ photo: Photo) {
+        self.isCapturing = false
+        self.photo = photo
+    }
+
+    func didFailToCapturePhoto() {
+        self.isCapturing = false
+    }
+
+    func photoCaptureIsPending(_ pending: Bool) {
+        // TODO: Not implemented
     }
 }

@@ -12,17 +12,6 @@ import AVFoundation
 import Photos
 import UIKit
 
-//  MARK: Class Camera Service, handles setup of AVFoundation needed for a basic camera app.
-public struct Photo: Identifiable, Equatable {
-    public var id: String
-    public var originalData: Data
-    
-    public init(id: String = UUID().uuidString, originalData: Data) {
-        self.id = id
-        self.originalData = originalData
-    }
-}
-
 public struct AlertError {
     public var title: String = ""
     public var message: String = ""
@@ -40,42 +29,26 @@ public struct AlertError {
     }
 }
 
-extension Photo {
-    public var compressedData: Data? {
-        ImageResizer(targetWidth: 800).resize(data: originalData)?.jpegData(compressionQuality: 0.5)
-    }
-    public var thumbnailData: Data? {
-        ImageResizer(targetWidth: 100).resize(data: originalData)?.jpegData(compressionQuality: 0.5)
-    }
-    public var thumbnailImage: UIImage? {
-        guard let data = thumbnailData else { return nil }
-        return UIImage(data: data)
-    }
-    public var image: UIImage? {
-        guard let data = compressedData else { return nil }
-        return UIImage(data: data)
-    }
+protocol CameraServiceDelegate {
+    func willCapturePhoto()
+    func didCapturePhoto(_ photo: Photo)
+
+    func didFailToCapturePhoto()
+    func photoCaptureIsPending(_ pending: Bool)
 }
 
-public class CameraService: NSObject, Identifiable {
+class CameraService: NSObject, Identifiable {
     typealias PhotoCaptureSessionID = String
-    
-    //    MARK: Observed Properties UI must react to
     
     @Published public var flashMode: AVCaptureDevice.FlashMode = .off
     @Published public var shouldShowAlertView = false
     @Published public var shouldShowSpinner = false
-    
-    @Published public var willCapturePhoto = false
     @Published public var isCameraButtonDisabled = false
     @Published public var isCameraUnavailable = false
-    @Published public var photo: Photo?
-    
-    //    MARK: Alert properties
+
+    public var delegate: CameraServiceDelegate?
     public var alertError: AlertError = AlertError()
-    
-    // MARK: Session Management Properties
-    
+
     public let session = AVCaptureSession()
     
     var isSessionRunning = false
@@ -473,75 +446,66 @@ public class CameraService: NSObject, Identifiable {
         }
     }
     
-    //    MARK: Capture Photo
-    
-    /// - Tag: CapturePhoto
+    // MARK: - Photo Capture
+
     public func capturePhoto() {
+        guard self.setupResult != .configurationFailed else {
+            return
+        }
+
         /*
          Retrieve the video preview layer's video orientation on the main queue before
          entering the session queue. This to ensures that UI elements are accessed on
          the main thread and session configuration is done on the session queue.
          */
-        
-        if self.setupResult != .configurationFailed {
-            let videoPreviewLayerOrientation: AVCaptureVideoOrientation = .portrait
-            self.isCameraButtonDisabled = true
-            
-            sessionQueue.async {
-                if let photoOutputConnection = self.photoOutput.connection(with: .video) {
-                    photoOutputConnection.videoOrientation = videoPreviewLayerOrientation
-                }
-                var photoSettings = AVCapturePhotoSettings()
-                
-                // Capture HEIF photos when supported. Enable according to user settings and high-resolution photos.
-                if  self.photoOutput.availablePhotoCodecTypes.contains(.hevc) {
-                    photoSettings = AVCapturePhotoSettings(format: [AVVideoCodecKey: AVVideoCodecType.hevc])
-                }
-                
-                if self.videoDeviceInput.device.isFlashAvailable {
-                    photoSettings.flashMode = self.flashMode
-                }
-                
-                photoSettings.isHighResolutionPhotoEnabled = true
-                if !photoSettings.__availablePreviewPhotoPixelFormatTypes.isEmpty {
-                    photoSettings.previewPhotoFormat = [kCVPixelBufferPixelFormatTypeKey as String: photoSettings.__availablePreviewPhotoPixelFormatTypes.first!]
-                }
-                
-                photoSettings.photoQualityPrioritization = .speed
-                
-                let photoCaptureProcessor = PhotoCaptureProcessor(with: photoSettings, willCapturePhotoAnimation: {
-                    // Flash the screen to signal that AVCam took a photo.
-                    DispatchQueue.main.async {
-                        self.willCapturePhoto.toggle()
-                        self.willCapturePhoto.toggle()
-                    }
-                }, completionHandler: { (photoCaptureProcessor) in
-                    // When the capture is complete, remove a reference to the photo capture delegate so it can be deallocated.
-                    if let data = photoCaptureProcessor.photoData {
-                        self.photo = Photo(originalData: data)
-                        print("passing photo")
-                    } else {
-                        print("No photo data")
-                    }
-                    
-                    self.isCameraButtonDisabled = false
-                    
-                    self.sessionQueue.async {
-                        self.inProgressPhotoCaptureDelegates[photoCaptureProcessor.requestedPhotoSettings.uniqueID] = nil
-                    }
-                }, photoProcessingHandler: { animate in
-                    // Animates a spinner while photo is processing
-                    if animate {
-                        self.shouldShowSpinner = true
-                    } else {
-                        self.shouldShowSpinner = false
-                    }
-                })
-                
-                // The photo output holds a weak reference to the photo capture delegate and stores it in an array to maintain a strong reference.
-                self.inProgressPhotoCaptureDelegates[photoCaptureProcessor.requestedPhotoSettings.uniqueID] = photoCaptureProcessor
-                self.photoOutput.capturePhoto(with: photoSettings, delegate: photoCaptureProcessor)
+
+        let videoPreviewLayerOrientation: AVCaptureVideoOrientation = .portrait
+        self.isCameraButtonDisabled = true
+
+        sessionQueue.async {
+            if let photoOutputConnection = self.photoOutput.connection(with: .video) {
+                photoOutputConnection.videoOrientation = videoPreviewLayerOrientation
             }
+            var photoSettings = AVCapturePhotoSettings()
+
+            // Capture HEIF photos when supported. Enable according to user settings and high-resolution photos.
+            if  self.photoOutput.availablePhotoCodecTypes.contains(.hevc) {
+                photoSettings = AVCapturePhotoSettings(format: [AVVideoCodecKey: AVVideoCodecType.hevc])
+            }
+
+            if self.videoDeviceInput.device.isFlashAvailable {
+                photoSettings.flashMode = self.flashMode
+            }
+
+            photoSettings.isHighResolutionPhotoEnabled = true
+            if !photoSettings.__availablePreviewPhotoPixelFormatTypes.isEmpty {
+                photoSettings.previewPhotoFormat = [kCVPixelBufferPixelFormatTypeKey as String: photoSettings.__availablePreviewPhotoPixelFormatTypes.first!]
+            }
+
+            photoSettings.photoQualityPrioritization = .speed
+
+            let photoCaptureProcessor = PhotoCaptureProcessor(with: photoSettings, willCapturePhotoAnimation: {
+                self.delegate?.willCapturePhoto()
+            }, completionHandler: { (photoCaptureProcessor) in
+                if let data = photoCaptureProcessor.photoData {
+                    self.delegate?.didCapturePhoto(Photo(originalData: data))
+                } else {
+                    self.delegate?.didFailToCapturePhoto()
+                }
+
+                self.isCameraButtonDisabled = false
+
+                // When the capture is complete, remove a reference to the photo capture delegate so it can be deallocated.
+                self.sessionQueue.async {
+                    self.inProgressPhotoCaptureDelegates[photoCaptureProcessor.requestedPhotoSettings.uniqueID] = nil
+                }
+            }, photoProcessingHandler: { isProcessing in
+                self.delegate?.photoCaptureIsPending(isProcessing)
+            })
+
+            // The photo output holds a weak reference to the photo capture delegate and stores it in an array to maintain a strong reference.
+            self.inProgressPhotoCaptureDelegates[photoCaptureProcessor.requestedPhotoSettings.uniqueID] = photoCaptureProcessor
+            self.photoOutput.capturePhoto(with: photoSettings, delegate: photoCaptureProcessor)
         }
     }
     

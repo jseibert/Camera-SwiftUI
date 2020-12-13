@@ -10,19 +10,17 @@ import Photos
 
 class PhotoCaptureProcessor: NSObject {
     private(set) var requestedPhotoSettings: AVCapturePhotoSettings
-    
     private let willCapturePhotoAnimation: () -> Void
-        
-    lazy var context = CIContext()
-    
     private let completionHandler: (PhotoCaptureProcessor) -> Void
-    
     private let photoProcessingHandler: (Bool) -> Void
+
+    lazy var context = CIContext()
     
     var photoData: Data?
     
     private var maxPhotoProcessingTime: CMTime?
-        
+
+    /// - Note: All handlers are called on the main thread
     init(with requestedPhotoSettings: AVCapturePhotoSettings,
          willCapturePhotoAnimation: @escaping () -> Void,
          completionHandler: @escaping (PhotoCaptureProcessor) -> Void,
@@ -65,7 +63,6 @@ extension PhotoCaptureProcessor: AVCapturePhotoCaptureDelegate {
     
     /// - Tag: DidFinishProcessingPhoto
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
-        
         DispatchQueue.main.async {
             self.photoProcessingHandler(false)
         }
@@ -74,7 +71,6 @@ extension PhotoCaptureProcessor: AVCapturePhotoCaptureDelegate {
             print("Error capturing photo: \(error)")
         } else {
             photoData = photo.fileDataRepresentation()
-
         }
     }
     
